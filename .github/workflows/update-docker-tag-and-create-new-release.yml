@@ -1,0 +1,131 @@
+name: Update Docker Tag and Create New Release
+
+on:
+  repository_dispatch:
+    types: [docker-image-updated]
+
+jobs:
+  update-docker-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Update bin/rector-docker with new tag
+        run: |
+          NEW_TAG="zoliszabo/rector:${{ github.event.client_payload.rector_version }}"
+          sed -i "s|^DOCKER_IMAGE=.*|DOCKER_IMAGE=\"$NEW_TAG\"|" bin/rector-docker
+
+      - name: Create Pull Request
+        id: create_pr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Update Docker image tag to ${{ github.event.client_payload.rector_version }}"
+          title: "Update Docker image tag to ${{ github.event.client_payload.rector_version }}"
+          body: |
+            This PR automatically updates the Docker image tag reference to use version ${{ github.event.client_payload.rector_version }}.
+
+            Changes:
+            - Updated `DOCKER_IMAGE` variable in `bin/rector-docker` to `zoliszabo/rector:${{ github.event.client_payload.rector_version }}`
+
+            Triggered by: ${{ github.event.sender.login }}
+          branch: update-rector-${{ github.event.client_payload.rector_version }}
+          delete-branch: true
+
+      - name: Auto-merge Pull Request
+        if: steps.create_pr.outputs.pull-request-number
+        run: |
+          gh pr merge ${{ steps.create_pr.outputs.pull-request-number }} --merge --auto
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait for merge to complete
+        if: steps.create_pr.outputs.pull-request-number
+        run: |
+          # Wait a bit for the merge to complete
+          sleep 10
+
+      - name: Get latest release version and increment based on Rector version
+        id: get_version
+        run: |
+          # Get the latest release tag (or empty if no releases exist)
+          LATEST_RELEASE_TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
+
+          # Current Rector version from the payload
+          NEW_RECTOR_VERSION="${{ github.event.client_payload.rector_version }}"
+
+          # Handle case where no releases exist
+          if [ "$LATEST_RELEASE_TAG" = "null" ] || [ -z "$LATEST_RELEASE_TAG" ]; then
+            NEW_RELEASE_TAG="1.0.0+rector-$NEW_RECTOR_VERSION"
+            echo "No releases found, starting with: $NEW_RELEASE_TAG"
+          else
+            # Extract package version (before +rector- suffix)
+            LAST_PACKAGE_VERSION=$(echo $LATEST_RELEASE_TAG | cut -d+ -f1)
+            LAST_RECTOR_VERSION=$(echo $LATEST_RELEASE_TAG | sed 's/.*+rector-//')
+
+            # Validate that we could extract the Rector version
+            if [ -z "$LAST_RECTOR_VERSION" ] || [ "$LAST_RECTOR_VERSION" = "$LATEST_RELEASE_TAG" ]; then
+              echo "Error: Could not extract Rector version from latest release tag: $LATEST_RELEASE_TAG"
+              echo "Expected format: x.y.z+rector-a.b.c"
+              exit 1
+            fi
+
+            # Parse current package version
+            LAST_PACKAGE_VERSION_MAJOR=$(echo $LAST_PACKAGE_VERSION | cut -d. -f1)
+            LAST_PACKAGE_VERSION_MINOR=$(echo $LAST_PACKAGE_VERSION | cut -d. -f2)
+            LAST_PACKAGE_VERSION_PATCH=$(echo $LAST_PACKAGE_VERSION | cut -d. -f3)
+
+            # Parse Rector versions
+            NEW_RECTOR_VERSION_MAJOR=$(echo $NEW_RECTOR_VERSION | cut -d. -f1)
+            NEW_RECTOR_VERSION_MINOR=$(echo $NEW_RECTOR_VERSION | cut -d. -f2)
+            NEW_RECTOR_VERSION_PATCH=$(echo $NEW_RECTOR_VERSION | cut -d. -f3)
+
+            LAST_RECTOR_VERSION_MAJOR=$(echo $LAST_RECTOR_VERSION | cut -d. -f1)
+            LAST_RECTOR_VERSION_MINOR=$(echo $LAST_RECTOR_VERSION | cut -d. -f2)
+            LAST_RECTOR_VERSION_PATCH=$(echo $LAST_RECTOR_VERSION | cut -d. -f3)
+
+            # Determine what type of version bump is needed
+            if [ "$NEW_RECTOR_VERSION_MAJOR" -gt "$LAST_RECTOR_VERSION_MAJOR" ]; then
+              # Rector major version increased - bump our major
+              NEW_PACKAGE_VERSION_MAJOR=$((LAST_PACKAGE_VERSION_MAJOR + 1))
+              NEW_RELEASE_TAG="${NEW_PACKAGE_VERSION_MAJOR}.0.0+rector-$NEW_RECTOR_VERSION"
+              echo "Rector major version increased: $LATEST_RELEASE_TAG -> $NEW_RELEASE_TAG"
+            elif [ "$NEW_RECTOR_VERSION_MAJOR" -eq "$LAST_RECTOR_VERSION_MAJOR" ] && [ "$NEW_RECTOR_VERSION_MINOR" -gt "$LAST_RECTOR_VERSION_MINOR" ]; then
+              # Rector minor version increased - bump our minor
+              NEW_PACKAGE_VERSION_MINOR=$((LAST_PACKAGE_VERSION_MINOR + 1))
+              NEW_RELEASE_TAG="${LAST_PACKAGE_VERSION_MAJOR}.${NEW_PACKAGE_VERSION_MINOR}.0+rector-$NEW_RECTOR_VERSION"
+              echo "Rector minor version increased: $LATEST_RELEASE_TAG -> $NEW_RELEASE_TAG"
+            elif [ "$NEW_RECTOR_VERSION_MAJOR" -eq "$LAST_RECTOR_VERSION_MAJOR" ] && [ "$NEW_RECTOR_VERSION_MINOR" -eq "$LAST_RECTOR_VERSION_MINOR" ] && [ "$NEW_RECTOR_VERSION_PATCH" -gt "$LAST_RECTOR_VERSION_PATCH" ]; then
+              # Rector patch version increased - bump our patch
+              NEW_PACKAGE_VERSION_PATCH=$((LAST_PACKAGE_VERSION_PATCH + 1))
+              NEW_RELEASE_TAG="${LAST_PACKAGE_VERSION_MAJOR}.${LAST_PACKAGE_VERSION_MINOR}.${NEW_PACKAGE_VERSION_PATCH}+rector-$NEW_RECTOR_VERSION"
+              echo "Rector patch version increased: $LATEST_RELEASE_TAG -> $NEW_RELEASE_TAG"
+            else
+              # No Rector version change or downgrade - just bump patch
+              NEW_PACKAGE_VERSION_PATCH=$((LAST_PACKAGE_VERSION_PATCH + 1))
+              NEW_RELEASE_TAG="${LAST_PACKAGE_VERSION_MAJOR}.${LAST_PACKAGE_VERSION_MINOR}.${NEW_PACKAGE_VERSION_PATCH}+rector-$NEW_RECTOR_VERSION"
+              echo "No Rector version change, bumping patch: $LATEST_RELEASE_TAG -> $NEW_RELEASE_TAG"
+            fi
+
+            echo "Previous version: $LATEST_RELEASE_TAG"
+          fi
+
+          echo "new_version=$NEW_RELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_RELEASE_TAG"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create new release
+        if: steps.create_pr.outputs.pull-request-number
+        run: |
+          gh release create ${{ steps.get_version.outputs.new_version }} \
+            --title "Release ${{ steps.get_version.outputs.new_version }}" \
+            --notes "Automatic release for Rector ${{ github.event.client_payload.rector_version }}
+
+          This release updates the Docker image tag to use Rector version ${{ github.event.client_payload.rector_version }}.
+
+          Changes:
+          - Updated \`DOCKER_IMAGE\` variable to \`zoliszabo/rector:${{ github.event.client_payload.rector_version }}\`"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
