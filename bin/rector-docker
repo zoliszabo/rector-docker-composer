@@ -1,10 +1,13 @@
 #!/bin/sh
 
+# Docker image configuration
+DOCKER_IMAGE="zoliszabo/rector:latest"
+
 # Check if running in interactive terminal environment
 if [ -t 0 ] && [ -t 1 ]; then
     # Running in interactive terminal - use -it flags
-    docker run --rm -it -v "$(pwd)":/app zoliszabo/rector rector "$@"
+    docker run --rm -it -v "$(pwd)":/app "$DOCKER_IMAGE" rector "$@"
 else
     # Running in non-interactive environment (CI/scripts) - skip -it flags
-    docker run --rm -v "$(pwd)":/app zoliszabo/rector rector "$@"
+    docker run --rm -v "$(pwd):/project" "$DOCKER_IMAGE" "$@"
 fi
