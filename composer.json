@@ -1,6 +1,6 @@
 {
     "name": "zoliszabo/rector-docker",
-    "description": "A Composer-based wrapper for running Rector via Docker.",
+    "description": "A wrapper Composer library for running Rector via Docker.",
     "type": "library",
     "license": "MIT",
     "bin": [

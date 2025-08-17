@@ -1,6 +1,6 @@
 # Rector Docker Composer Package
 
-A Composer-based wrapper for running [Rector](https://getrector.com/) via Docker. This package provides a convenient way to use Rector without requiring PHP or Rector to be installed locally on your system.
+A wrapper Composer library for running [Rector](https://getrector.com/) via Docker. This package provides a convenient way to use Rector without requiring PHP or Rector to be installed locally on your system.
 
 ## What is this?
 
