@@ -40,7 +40,9 @@ composer require --dev zoliszabo/rector-docker
 
 ## Usage
 
-Once installed, navigate to your project directory and use `rector-docker` exactly like you would use the regular `rector` command:
+Once installed, navigate to your project directory and use `rector-docker` exactly like you would use the regular `rector` command.
+
+### Global Installation Usage
 
 ```bash
 # Process using default rector.php configuration
@@ -60,6 +62,21 @@ rector-docker process src --dry-run
 
 # Process with a specific configuration file
 rector-docker process src --config custom-rector.php
+```
+
+### Project-specific Installation Usage
+
+When installed as a project dependency, prefix commands with `vendor/bin/`:
+
+```bash
+# Process using default rector.php configuration
+vendor/bin/rector-docker process
+
+# Process your src directory
+vendor/bin/rector-docker process src
+
+# Or use composer exec
+composer exec rector-docker process src
 ```
 
 All arguments and options are passed directly to Rector running inside the Docker container.
