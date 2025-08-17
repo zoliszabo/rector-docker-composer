@@ -7,6 +7,9 @@ on:
 jobs:
   update-docker-tag:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -19,9 +22,6 @@ jobs:
       - name: Create Pull Request
         id: create_pr
         uses: peter-evans/create-pull-request@v7
-        permissions:
-          contents: write
-          pull-requests: write
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "Update Docker image tag to ${{ github.event.client_payload.rector_version }}"
