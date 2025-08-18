@@ -9,5 +9,5 @@ if [ -t 0 ] && [ -t 1 ]; then
     docker run --rm -it -v "$(pwd)":/app "$DOCKER_IMAGE" rector "$@"
 else
     # Running in non-interactive environment (CI/scripts) - skip -it flags
-    docker run --rm -v "$(pwd):/project" "$DOCKER_IMAGE" "$@"
+    docker run --rm -v "$(pwd):/project" "$DOCKER_IMAGE" rector "$@"
 fi
